@@ -15,7 +15,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-APP_ID = "com.varsovia.WindowEffectsHub"
+APP_ID = "com.asinux.WindowEffectsHub"
 
 EXTENSIONS = [
     {

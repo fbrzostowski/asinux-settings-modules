@@ -1,6 +1,6 @@
 # asinux-settings-modules
 
-Downloadable extras for [Varsovia Advanced Configuration](https://github.com/fbrzostowski)'s
+Downloadable extras for [Asinux System Configuration](https://github.com/fbrzostowski)'s
 optional-module system (`asinux-settings/` in that project).
 
 Each module there ships a small `module.json` + `install.sh` locally, but
