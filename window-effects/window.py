@@ -6,6 +6,7 @@ extensions this module installs. Each extension ships its own settings UI
 (Burn My Windows especially, with dozens of effect profiles) so this stays
 a launcher rather than reimplementing them - it just opens the real thing.
 """
+import subprocess
 import sys
 
 import gi
@@ -39,6 +40,17 @@ EXTENSIONS = [
 ]
 
 
+def get_enabled_extensions():
+    try:
+        result = subprocess.run(
+            ["gnome-extensions", "list", "--enabled"],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
 class WindowEffectsWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
@@ -56,6 +68,9 @@ class WindowEffectsWindow(Adw.ApplicationWindow):
         list_box.add_css_class("boxed-list")
         list_box.set_selection_mode(Gtk.SelectionMode.NONE)
 
+        self.switch_handlers = {}
+        enabled = get_enabled_extensions()
+
         for ext in EXTENSIONS:
             row = Adw.ActionRow(title=ext["name"], subtitle=ext["description"])
 
@@ -70,6 +85,13 @@ class WindowEffectsWindow(Adw.ApplicationWindow):
             row.add_suffix(open_button)
             row.set_activatable_widget(open_button)
 
+            switch = Gtk.Switch()
+            switch.set_valign(Gtk.Align.CENTER)
+            switch.set_active(ext["uuid"] in enabled)
+            handler_id = switch.connect("notify::active", self.on_toggle_extension, ext)
+            self.switch_handlers[ext["uuid"]] = (switch, handler_id)
+            row.add_suffix(switch)
+
             list_box.append(row)
 
         clamp = Adw.Clamp()
@@ -83,6 +105,29 @@ class WindowEffectsWindow(Adw.ApplicationWindow):
         self.toast_overlay.set_child(clamp)
         toolbar_view.set_content(self.toast_overlay)
         self.set_content(toolbar_view)
+
+    def on_toggle_extension(self, switch, _pspec, ext):
+        enable = switch.get_active()
+        try:
+            result = subprocess.run(
+                ["gnome-extensions", "enable" if enable else "disable", ext["uuid"]],
+                capture_output=True, text=True, check=False,
+            )
+        except FileNotFoundError as err:
+            self._revert_switch(ext, enable, str(err))
+            return
+
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"exit code {result.returncode}"
+            self._revert_switch(ext, enable, detail)
+
+    def _revert_switch(self, ext, attempted_enable, detail):
+        switch, handler_id = self.switch_handlers[ext["uuid"]]
+        switch.handler_block(handler_id)
+        switch.set_active(not attempted_enable)
+        switch.handler_unblock(handler_id)
+        verb = "enable" if attempted_enable else "disable"
+        self.toast_overlay.add_toast(Adw.Toast.new(f"Couldn't {verb} {ext['name']}: {detail}"))
 
     def on_open_clicked(self, button, ext):
         try:
